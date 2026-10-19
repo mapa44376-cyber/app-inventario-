@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Inventario de Robótica - Academia</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .active-tab {
+            border-bottom: 3px solid #2563eb;
+            color: #2563eb;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- TOP NAVIGATION BAR -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-600 text-white p-2.5 rounded-xl shadow-md shadow-blue-500/20">
+                        <i class="fa-solid fa-robot text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg text-slate-900 leading-tight">RoboTrack Pro</h1>
+                        <p class="text-xs text-slate-500 font-medium">Cloud Database Activa</p>
+                    </div>
+                </div>
+
+                <div class="flex gap-2">
+                    <button onclick="openModal('modal-nuevo-robot')" class="hidden sm:flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-sm font-semibold transition-all">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>Añadir al Inventario</span>
+                    </button>
+                    <button onclick="openModal('modal-nueva-salida')" class="hidden sm:flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-md shadow-blue-600/20">
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                        <span>Nueva Salida</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- NAVIGATION TABS -->
+            <nav class="flex space-x-6 overflow-x-auto border-t border-slate-100 sm:border-t-0">
+                <button onclick="switchTab('dashboard')" id="tab-btn-dashboard" class="active-tab py-3 px-1 text-sm flex items-center gap-2 whitespace-nowrap">
+                    <i class="fa-solid fa-gauge-high"></i>
+                    <span>Material Fuera ("EN USO")</span>
+                    <span id="badge-en-uso" class="ml-1.5 bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full font-bold">0</span>
+                </button>
+                <button onclick="switchTab('inventario')" id="tab-btn-inventario" class="text-slate-500 hover:text-slate-700 py-3 px-1 text-sm flex items-center gap-2 whitespace-nowrap">
+                    <i class="fa-solid fa-boxes-stacked"></i>
+                    <span>Base de Datos / Inventario</span>
+                </button>
+                <button onclick="switchTab('historial')" id="tab-btn-historial" class="text-slate-500 hover:text-slate-700 py-3 px-1 text-sm flex items-center gap-2 whitespace-nowrap">
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                    <span>Historial Completo</span>
+                </button>
+                <button onclick="switchTab('directorio')" id="tab-btn-directorio" class="text-slate-500 hover:text-slate-700 py-3 px-1 text-sm flex items-center gap-2 whitespace-nowrap">
+                    <i class="fa-solid fa-users-rectangle"></i>
+                    <span>Profesores y Colegios</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- TOAST NOTIFICATION -->
+        <div id="toast-notification" class="hidden mb-6 p-4 rounded-xl shadow-md flex items-center justify-between transition-all duration-300">
+            <div class="flex items-center gap-3">
+                <i id="toast-icon" class="fa-solid text-lg"></i>
+                <span id="toast-message" class="text-sm font-medium"></span>
+            </div>
+            <button onclick="hideToast()" class="text-slate-400 hover:text-slate-600">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- TAB 1: DASHBOARD (EN USO) -->
+        <section id="view-dashboard" class="space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900">Control de Material Activo</h2>
+                    <p class="text-xs sm:text-sm text-slate-500 mt-0.5">Sincronizado en la nube en tiempo real.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="bg-amber-50 border border-amber-200 text-amber-800 text-xs px-3 py-2 rounded-xl flex items-center gap-2 font-medium">
+                        <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                        <span id="stat-total-robots-fuera">0 Robots fuera de la academia</span>
+                    </div>
+                </div>
+            </div>
+            <div id="grid-en-uso" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+            <div id="empty-state-en-uso" class="hidden bg-white border border-dashed border-slate-300 rounded-2xl p-12 text-center">
+                <div class="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+                    <i class="fa-solid fa-circle-check"></i>
+                </div>
+                <h3 class="text-lg font-bold text-slate-800">¡Todo el material está en la academia!</h3>
+                <p class="text-slate-500 text-sm mt-1 max-w-md mx-auto">No hay ningún préstamo activo actualmente.</p>
+            </div>
+        </section>
+
+        <!-- TAB 2: INVENTARIO -->
+        <section id="view-inventario" class="hidden space-y-6">
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900">Inventario General de Robótica</h2>
+                    <p class="text-xs sm:text-sm text-slate-500 mt-0.5">Base de datos central en la nube.</p>
+                </div>
+                <button onclick="openModal('modal-nuevo-robot')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all">
+                    + Registrar Nuevo Modelo
+                </button>
+            </div>
+
+            <div class="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-xs uppercase tracking-wider">
+                            <tr>
+                                <th class="p-4">Modelo / Descripción</th>
+                                <th class="p-4">Edades</th>
+                                <th class="p-4 text-center">Stock Total</th>
+                                <th class="p-4 text-center">En Uso (Fuera)</th>
+                                <th class="p-4 text-center">Disponible</th>
+                                <th class="p-4 text-right">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-inventario-body" class="divide-y divide-slate-100 text-slate-700"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: HISTORIAL -->
+        <section id="view-historial" class="hidden space-y-6">
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                <h2 class="text-xl font-bold text-slate-900">Historial de Salidas y Devoluciones</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <input type="text" id="filter-search" oninput="renderHistorial()" placeholder="Buscar profesor, colegio..." class="w-full p-2 text-sm bg-slate-50 border rounded-xl">
+                    <select id="filter-estado" onchange="renderHistorial()" class="w-full p-2 text-sm bg-slate-50 border rounded-xl">
+                        <option value="TODOS">Todos los Estados</option>
+                        <option value="EN USO">Solo "EN USO"</option>
+                        <option value="DEVUELTO">Solo "DEVUELTO"</option>
+                    </select>
+                    <select id="filter-profesor" onchange="renderHistorial()" class="w-full p-2 text-sm bg-slate-50 border rounded-xl">
+                        <option value="TODOS">Todos los Profesores</option>
+                    </select>
+                </div>
+            </div>
+            <div class="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-xs uppercase tracking-wider">
+                        <tr>
+                            <th class="p-4">Estado</th>
+                            <th class="p-4">Profesor</th>
+                            <th class="p-4">Colegio / Instituto</th>
+                            <th class="p-4">Material / Cantidad</th>
+                            <th class="p-4">Fecha Salida</th>
+                            <th class="p-4">Fecha Devolución</th>
+                            <th class="p-4 text-right">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-historial-body" class="divide-y divide-slate-100"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- TAB 4: DIRECTORIO -->
+        <section id="view-directorio" class="hidden grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white p-5 rounded-2xl border shadow-sm">
+                <div class="flex items-center justify-between border-b pb-3">
+                    <h3 class="font-bold text-slate-800">Profesores Activos</h3>
+                    <button onclick="openModal('modal-nuevo-profesor')" class="text-xs bg-slate-100 hover:bg-slate-200 p-2 rounded-lg">+ Añadir</button>
+                </div>
+                <ul id="lista-profesores" class="divide-y divide-slate-100 text-sm"></ul>
+            </div>
+            <div class="bg-white p-5 rounded-2xl border shadow-sm">
+                <div class="flex items-center justify-between border-b pb-3">
+                    <h3 class="font-bold text-slate-800">Colegios e Institutos</h3>
+                    <button onclick="openModal('modal-nuevo-colegio')" class="text-xs bg-slate-100 hover:bg-slate-200 p-2 rounded-lg">+ Añadir</button>
+                </div>
+                <ul id="lista-colegios" class="divide-y divide-slate-100 text-sm"></ul>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- MODAL NUEVO ROBOT -->
+    <div id="modal-nuevo-robot" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl p-6">
+            <h3 class="font-bold text-slate-800 text-lg mb-4">Añadir Kit/Robot a Base de Datos</h3>
+            <form onsubmit="guardarNuevoRobot(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Modelo / Nombre</label>
+                    <input type="text" id="input-modelo-robot" required placeholder="Ej. LEGO Education SPIKE" class="w-full p-2.5 bg-slate-50 border rounded-xl text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Edades Recomendadas</label>
+                    <input type="text" id="input-edades-robot" required placeholder="Ej. 10-14 años" class="w-full p-2.5 bg-slate-50 border rounded-xl text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Stock Total Comprado</label>
+                    <input type="number" id="input-stock-robot" min="1" value="10" required class="w-full p-2.5 bg-slate-50 border rounded-xl text-sm">
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeModal('modal-nuevo-robot')" class="px-3 py-2 text-sm text-slate-600">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 text-sm bg-blue-600 text-white font-semibold rounded-xl">Guardar en la Nube</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL NUEVA SALIDA -->
+    <div id="modal-nueva-salida" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl p-6">
+            <h3 class="font-bold text-slate-800 text-lg mb-4">Registrar Salida de Material</h3>
+            <form id="form-nueva-salida" onsubmit="guardarNuevaSalida(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Profesor Responsable *</label>
+                    <select id="select-profesor" required class="w-full p-2.5 bg-slate-50 border rounded-xl text-sm"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Colegio / Instituto Destino *</label>
+                    <select id="select-colegio" required class="w-full p-2.5 bg-slate-50 border rounded-xl text-sm"></select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Modelo de Robot *</label>
+                        <select id="select-modelo" required class="w-full p-2.5 bg-slate-50 border rounded-xl text-sm"></select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Cantidad *</label>
+                        <input type="number" id="input-cantidad" min="1" max="50" value="1" required class="w-full p-2.5 bg-slate-50 border rounded-xl text-sm">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Notas / Observaciones</label>
+                    <textarea id="input-notas" rows="2" class="w-full p-2.5 bg-slate-50 border rounded-xl text-sm"></textarea>
+                </div>
+                <div class="pt-3 flex justify-end gap-2">
+                    <button type="button" onclick="closeModal('modal-nueva-salida')" class="px-4 py-2 text-sm text-slate-600">Cancelar</button>
+                    <button type="submit" class="px-5 py-2 text-sm bg-blue-600 text-white font-semibold rounded-xl">Confirmar Salida</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODALES DIRECTO -->
+    <div id="modal-nuevo-profesor" class="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6">
+            <h3 class="font-bold text-slate-800 text-lg mb-4">Añadir Profesor</h3>
+            <form onsubmit="guardarNuevoProfesor(event)" class="space-y-4">
+                <input type="text" id="input-nombre-profesor" required placeholder="Nombre Completo" class="w-full p-2.5 bg-slate-50 border rounded-xl text-sm">
+                <div class="flex justify-end gap-2">
+                    <button type="button" onclick="closeModal('modal-nuevo-profesor')" class="px-3 py-2 text-sm">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 text-sm bg-blue-600 text-white rounded-xl">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal-nuevo-colegio" class="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6">
+            <h3 class="font-bold text-slate-800 text-lg mb-4">Añadir Centro Educativo</h3>
+            <form onsubmit="guardarNuevoColegio(event)" class="space-y-4">
+                <input type="text" id="input-nombre-colegio" required placeholder="Nombre del Centro" class="w-full p-2.5 bg-slate-50 border rounded-xl text-sm">
+                <div class="flex justify-end gap-2">
+                    <button type="button" onclick="closeModal('modal-nuevo-colegio')" class="px-3 py-2 text-sm">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 text-sm bg-blue-600 text-white rounded-xl">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // CONFIGURACIÓN DE FIREBASE (Tus credenciales reales)
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyDtz8HxjK-4E9T66whnCS5leKLnZKyw79c",
+            authDomain: "aplicacion-gestion-de-datos.firebaseapp.com",
+            projectId: "aplicacion-gestion-de-datos",
+            storageBucket: "aplicacion-gestion-de-datos.appspot.com",
+            messagingSenderId: "107185732495",
+            appId: "1:107185732495:web:a23aa5379cbfc85cdaa9fa"
+        };
+
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // Variables de datos sincronizadas
+        let inventarioBD = [];
+        let profesores = [];
+        let colegios = [];
+        let prestamos = [];
+
+        window.onload = function() {
+            cargarDatosDesdeLaNube();
+        };
+
+        // Escuchar cambios en tiempo real desde Firestore
+        function cargarDatosDesdeLaNube() {
+            // 1. Inventario
+            db.collection("inventario").onSnapshot((snapshot) => {
+                inventarioBD = [];
+                snapshot.forEach((doc) => {
+                    inventarioBD.push({ idDoc: doc.id, ...doc.data() });
+                });
+                renderApp();
+            });
+
+            // 2. Profesores
+            db.collection("profesores").onSnapshot((snapshot) => {
+                profesores = [];
+                snapshot.forEach((doc) => {
+                    profesores.push({ idDoc: doc.id, ...doc.data() });
+                });
+                renderApp();
+            });
+
+            // 3. Colegios
+            db.collection("colegios").onSnapshot((snapshot) => {
+                colegios = [];
+                snapshot.forEach((doc) => {
+                    colegios.push({ idDoc: doc.id, ...doc.data() });
+                });
+                renderApp();
+            });
+
+            // 4. Préstamos
+            db.collection("prestamos").onSnapshot((snapshot) => {
+                prestamos = [];
+                snapshot.forEach((doc) => {
+                    prestamos.push({ idDoc: doc.id, ...doc.data() });
+                });
+                renderApp();
+            });
+        }
+
+        function switchTab(tabName) {
+            ['dashboard', 'inventario', 'historial', 'directorio'].forEach(t => {
+                document.getElementById(`view-${t}`).classList.add('hidden');
+                document.getElementById(`tab-btn-${t}`).className = "text-slate-500 hover:text-slate-700 py-3 px-1 text-sm flex items-center gap-2 whitespace-nowrap";
+            });
+
+            document.getElementById(`view-${tabName}`).classList.remove('hidden');
+            document.getElementById(`tab-btn-${tabName}`).className = "active-tab py-3 px-1 text-sm flex items-center gap-2 whitespace-nowrap";
+        }
+
+        function renderApp() {
+            renderDashboard();
+            renderInventarioBD();
+            renderHistorial();
+            renderDirectorio();
+            populateSelects();
+        }
+
+        function renderInventarioBD() {
+            const tbody = document.getElementById('tabla-inventario-body');
+            tbody.innerHTML = inventarioBD.map(item => {
+                const enUso = prestamos
+                    .filter(p => p.modelo === item.modelo && p.estado === 'EN USO')
+                    .reduce((sum, p) => sum + parseInt(p.cantidad), 0);
+
+                const disponible = item.stockTotal - enUso;
+
+                return `
+                    <tr class="hover:bg-slate-50">
+                        <td class="p-4 font-bold text-slate-900">${item.modelo}</td>
+                        <td class="p-4"><span class="bg-slate-100 text-slate-700 text-xs px-2 py-1 rounded-md font-medium">${item.edades}</span></td>
+                        <td class="p-4 text-center font-bold text-slate-800">${item.stockTotal}</td>
+                        <td class="p-4 text-center font-semibold text-amber-600">${enUso}</td>
+                        <td class="p-4 text-center font-bold text-emerald-600">${disponible}</td>
+                        <td class="p-4 text-right">
+                            <button onclick="eliminarRobot('${item.idDoc}')" class="text-slate-400 hover:text-red-500 text-xs">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function guardarNuevoRobot(e) {
+            e.preventDefault();
+            const modelo = document.getElementById('input-modelo-robot').value.trim();
+            const edades = document.getElementById('input-edades-robot').value.trim();
+            const stockTotal = parseInt(document.getElementById('input-stock-robot').value);
+
+            db.collection("inventario").add({ modelo, edades, stockTotal })
+                .then(() => {
+                    closeModal('modal-nuevo-robot');
+                    document.getElementById('modal-nuevo-robot').querySelector('form').reset();
+                    showToast(`Modelo ${modelo} añadido a la nube`, 'success');
+                });
+        }
+
+        function eliminarRobot(idDoc) {
+            if (confirm("¿Deseas eliminar este registro de la base de datos?")) {
+                db.collection("inventario").doc(idDoc).delete();
+            }
+        }
+
+        function renderDashboard() {
+            const grid = document.getElementById('grid-en-uso');
+            const emptyState = document.getElementById('empty-state-en-uso');
+            const prestamosEnUso = prestamos.filter(p => p.estado === 'EN USO');
+
+            document.getElementById('badge-en-uso').innerText = prestamosEnUso.length;
+            const totalOut = prestamosEnUso.reduce((sum, item) => sum + parseInt(item.cantidad), 0);
+            document.getElementById('stat-total-robots-fuera').innerText = `${totalOut} Robots fuera de la academia`;
+
+            if (prestamosEnUso.length === 0) {
+                grid.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            grid.innerHTML = prestamosEnUso.map(item => `
+                <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between space-y-4">
+                    <div>
+                        <div class="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-base leading-tight">${item.profesor}</h3>
+                                <p class="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><i class="fa-solid fa-school"></i> ${item.colegio}</p>
+                            </div>
+                            <span class="bg-amber-100 text-amber-800 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full">EN USO</span>
+                        </div>
+                        <div class="mt-4 bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
+                            <div class="flex items-center justify-between text-xs font-semibold text-slate-700">
+                                <span><i class="fa-solid fa-robot text-blue-600 mr-1"></i> ${item.modelo}</span>
+                                <span class="bg-blue-600 text-white px-2 py-0.5 rounded-md">${item.cantidad} uds</span>
+                            </div>
+                            ${item.notas ? `<p class="text-xs text-slate-500 italic">"${item.notas}"</p>` : ''}
+                        </div>
+                    </div>
+                    <button onclick="registrarDevolucion('${item.idDoc}')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl text-sm">
+                        Registrar Devolución
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function renderHistorial() {
+            const tbody = document.getElementById('tabla-historial-body');
+            const searchText = document.getElementById('filter-search').value.toLowerCase();
+            const filterEstado = document.getElementById('filter-estado').value;
+            const filterProfesor = document.getElementById('filter-profesor').value;
+
+            const filtered = prestamos.filter(item => {
+                const matchesSearch = (item.profesor || '').toLowerCase().includes(searchText) || (item.colegio || '').toLowerCase().includes(searchText);
+                const matchesEstado = filterEstado === 'TODOS' || item.estado === filterEstado;
+                const matchesProfesor = filterProfesor === 'TODOS' || item.profesor === filterProfesor;
+                return matchesSearch && matchesEstado && matchesProfesor;
+            });
+
+            tbody.innerHTML = filtered.map(item => `
+                <tr class="hover:bg-slate-50">
+                    <td class="p-4">${item.estado === 'EN USO' ? `<span class="bg-amber-100 text-amber-800 text-[10px] font-bold px-2.5 py-1 rounded-full">EN USO</span>` : `<span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-1 rounded-full">DEVUELTO</span>`}</td>
+                    <td class="p-4 font-semibold">${item.profesor}</td>
+                    <td class="p-4">${item.colegio}</td>
+                    <td class="p-4">${item.modelo} <span class="text-xs bg-slate-100 px-1.5 py-0.5 rounded font-bold">x${item.cantidad}</span></td>
+                    <td class="p-4 text-xs">${formatDate(item.fechaSalida)}</td>
+                    <td class="p-4 text-xs">${item.fechaDevolucion ? formatDate(item.fechaDevolucion) : '-'}</td>
+                    <td class="p-4 text-right">
+                        ${item.estado === 'EN USO' ? `<button onclick="registrarDevolucion('${item.idDoc}')" class="text-xs bg-emerald-50 text-emerald-700 font-bold px-3 py-1.5 rounded-lg">Devolver</button>` : `<span class="text-slate-300 text-xs">Completado</span>`}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderDirectorio() {
+            document.getElementById('lista-profesores').innerHTML = profesores.map((p) => `<li class="py-3 flex justify-between"><span>${p.nombre}</span><button onclick="eliminarProfesor('${p.idDoc}')" class="text-xs text-red-500">Eliminar</button></li>`).join('');
+            document.getElementById('lista-colegios').innerHTML = colegios.map((c) => `<li class="py-3 flex justify-between"><span>${c.nombre}</span><button onclick="eliminarColegio('${c.idDoc}')" class="text-xs text-red-500">Eliminar</button></li>`).join('');
+        }
+
+        function populateSelects() {
+            const selectProf = document.getElementById('select-profesor');
+            const selectCol = document.getElementById('select-colegio');
+            const selectModel = document.getElementById('select-modelo');
+            const filterProf = document.getElementById('filter-profesor');
+
+            if(selectProf) selectProf.innerHTML = profesores.map(p => `<option value="${p.nombre}">${p.nombre}</option>`).join('');
+            if(selectCol) selectCol.innerHTML = colegios.map(c => `<option value="${c.nombre}">${c.nombre}</option>`).join('');
+            if(selectModel) selectModel.innerHTML = inventarioBD.map(i => `<option value="${i.modelo}">${i.modelo}</option>`).join('');
+            if(filterProf) filterProf.innerHTML = `<option value="TODOS">Todos los Profesores</option>` + profesores.map(p => `<option value="${p.nombre}">${p.nombre}</option>`).join('');
+        }
+
+        function registrarDevolucion(idDoc) {
+            db.collection("prestamos").doc(idDoc).update({
+                estado: 'DEVUELTO',
+                fechaDevolucion: new Date().toISOString()
+            }).then(() => {
+                showToast("Material devuelto con éxito", "success");
+            });
+        }
+
+        function guardarNuevaSalida(e) {
+            e.preventDefault();
+            const modeloSel = document.getElementById('select-modelo').value;
+            const cantSalida = parseInt(document.getElementById('input-cantidad').value);
+
+            const robotBD = inventarioBD.find(r => r.modelo === modeloSel);
+            const enUsoActual = prestamos
+                .filter(p => p.modelo === modeloSel && p.estado === 'EN USO')
+                .reduce((sum, p) => sum + parseInt(p.cantidad), 0);
+            
+            const disponible = (robotBD ? robotBD.stockTotal : 0) - enUsoActual;
+
+            if (cantSalida > disponible) {
+                alert(`Error: No hay suficiente stock disponible. Solo quedan ${disponible} unidades de ${modeloSel} en la academia.`);
+                return;
+            }
+
+            const nuevoPrestamo = {
+                id: 'MOV-' + Math.floor(1000 + Math.random() * 9000),
+                profesor: document.getElementById('select-profesor').value,
+                colegio: document.getElementById('select-colegio').value,
+                modelo: modeloSel,
+                cantidad: cantSalida,
+                notas: document.getElementById('input-notas').value,
+                fechaSalida: new Date().toISOString(),
+                fechaDevolucion: null,
+                estado: "EN USO"
+            };
+
+            db.collection("prestamos").add(nuevoPrestamo).then(() => {
+                closeModal('modal-nueva-salida');
+                document.getElementById('form-nueva-salida').reset();
+                showToast("Salida registrada en la nube", "success");
+                switchTab('dashboard');
+            });
+        }
+
+        function guardarNuevoProfesor(e) {
+            e.preventDefault();
+            const nombre = document.getElementById('input-nombre-profesor').value.trim();
+            if(nombre) {
+                db.collection("profesores").add({ nombre }).then(() => {
+                    closeModal('modal-nuevo-profesor');
+                    document.getElementById('input-nombre-profesor').value = '';
+                    showToast("Profesor añadido", "success");
+                });
+            }
+        }
+
+        function guardarNuevoColegio(e) {
+            e.preventDefault();
+            const nombre = document.getElementById('input-nombre-colegio').value.trim();
+            if(nombre) {
+                db.collection("colegios").add({ nombre }).then(() => {
+                    closeModal('modal-nuevo-colegio');
+                    document.getElementById('input-nombre-colegio').value = '';
+                    showToast("Colegio añadido", "success");
+                });
+            }
+        }
+
+        function eliminarProfesor(idDoc) { db.collection("profesores").doc(idDoc).delete(); }
+        function eliminarColegio(idDoc) { db.collection("colegios").doc(idDoc).delete(); }
+
+        function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+        function formatDate(iso) { return iso ? new Date(iso).toLocaleDateString('es-ES') : ''; }
+
+        function showToast(msg, type) {
+            const toast = document.getElementById('toast-notification');
+            document.getElementById('toast-message').innerText = msg;
+            toast.className = `mb-6 p-4 rounded-xl shadow-md flex items-center justify-between ${type === 'success' ? 'bg-emerald-50 text-emerald-800' : 'bg-blue-50 text-blue-800'}`;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 4000);
+        }
+        function hideToast() { document.getElementById('toast-notification').classList.add('hidden'); }
+    </script>
+</body>
+</html>
